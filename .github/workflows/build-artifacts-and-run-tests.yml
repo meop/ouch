@@ -209,6 +209,16 @@ jobs:
         env:
           OUCH_ARTIFACTS_FOLDER: man-page-and-completions-artifacts
 
+      - name: Check Windows ARM64 GNU-family portability (fork smoke)
+        if: matrix.target == 'aarch64-pc-windows-gnullvm' && inputs.artifact_upload_mode != 'none'
+        shell: pwsh
+        run: |
+          $exe = "target/aarch64-pc-windows-gnullvm/release/ouch.exe"
+          llvm-readobj --coff-imports $exe | Select-String 'Name: ' | Sort-Object -Unique
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw "ouch.exe failed to start without MSYS2 on PATH" }
+
       - name: Upload release artifacts
         if: |
           ${{ inputs.artifact_upload_mode != 'none' &&
