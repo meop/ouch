@@ -47,6 +47,7 @@ jobs:
           - x86_64-pc-windows-gnu
           - x86_64-pc-windows-msvc
           - aarch64-pc-windows-msvc
+          - aarch64-pc-windows-gnullvm
           - x86_64-apple-darwin
           - aarch64-apple-darwin
           # cross
@@ -64,6 +65,8 @@ jobs:
             os: windows-latest
           - target: aarch64-pc-windows-msvc
             os: windows-latest
+          - target: aarch64-pc-windows-gnullvm
+            os: windows-11-arm
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-apple-darwin
@@ -110,6 +113,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
+
+      - name: Install Windows ARM64 GNU-family toolchain
+        if: matrix.target == 'aarch64-pc-windows-gnullvm'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          update: true
+          install: mingw-w64-clang-aarch64-clang
+
+      - name: Use Windows ARM64 GNU-family toolchain
+        if: matrix.target == 'aarch64-pc-windows-gnullvm'
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $bin = "$env:MSYS2_LOCATION\clangarm64\bin"
+          echo $bin >> $env:GITHUB_PATH
+          echo "CARGO_TARGET_AARCH64_PC_WINDOWS_GNULLVM_LINKER=$bin\clang.exe" >> $env:GITHUB_ENV
+          # The compression libraries are C and C++, so cc-rs needs the same toolchain.
+          echo "CC_aarch64_pc_windows_gnullvm=$bin\clang.exe" >> $env:GITHUB_ENV
+          echo "CXX_aarch64_pc_windows_gnullvm=$bin\clang++.exe" >> $env:GITHUB_ENV
+          echo "AR_aarch64_pc_windows_gnullvm=$bin\llvm-ar.exe" >> $env:GITHUB_ENV
+          # bzip3's bindgen needs MSYS2's libclang (with its builtin headers) and the
+          # clang spelling of the target; clang rejects the "gnullvm" suffix.
+          echo "LIBCLANG_PATH=$bin" >> $env:GITHUB_ENV
+          echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_pc_windows_gnullvm=--target=aarch64-w64-mingw32" >> $env:GITHUB_ENV
+          # Link libunwind statically so the release does not need MSYS2's libunwind.dll.
+          echo "CARGO_TARGET_AARCH64_PC_WINDOWS_GNULLVM_RUSTFLAGS=-C target-feature=+crt-static" >> $env:GITHUB_ENV
 
       - name: Install cross
         if: matrix.use-cross
